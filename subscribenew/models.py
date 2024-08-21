@@ -93,6 +93,8 @@ class Subscription(models.Model):
     is_trial=models.BooleanField(default=True)
     created_at=models.DateTimeField(auto_now_add=True)
     card_token = models.CharField(max_length=255, blank=True, null=True)  # New field to store the card token
+    authpayuid = models.CharField(max_length=255, blank=True, null=True)  # Add this field
+
 
     def __str__(self):
         return self.subscription_name

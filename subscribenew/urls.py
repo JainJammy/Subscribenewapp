@@ -15,9 +15,9 @@ urlpatterns = [
     path("initiate_payment/",views.initiate_payment),
     path("payment_success/",views.payment_success),
     path("autopayment_success/",views.auto_payment_success),
-    path("handle_auto_payment_success/",views.handle_auto_payment_success),
+    #path("handle_auto_payment_success/",views.handle_auto_payment_success),
     path("payment_failure/",views.payment_failure),
     path("cancel_subscription/",views.cancel_subscription),
-    path("")
+    path("auto_payment_failure/",views.auto_payment_failure)
     #path("handle_auto_payment_success/",views.handle_auto_payment_success)
 ]

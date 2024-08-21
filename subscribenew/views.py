@@ -11,14 +11,64 @@ from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
 from django.http import HttpResponse,HttpResponseRedirect
 from paywix.payu import Payu
-
+import datetime
 import pdb
 import hashlib
 import uuid
-
+import requests
 # Create your views here.
 from datetime import date, timedelta
 import calendar
+import json
+def initate_monthly_recurring_payment(user,amount,id):
+    txn_id = str(uuid.uuid4())
+    #subscription = Subscription.objects.get(id=id)
+    #authpayuid = subscription.authpayuid  # Retrieve the authpayuid
+
+    var1_dict= {
+        "authpayuid":"6611427463",
+        "invoiceDisplayNumber": txn_id,
+        "amount": str(amount),
+        "txnid": txn_id,
+        "phone": user.phone_number,
+        "email": user.email,
+        "udf2": "",
+        "udf3": "",
+        "udf4": "",
+        "udf5": ""
+    }
+    var1=json.dumps(var1_dict)
+
+    txn_id=str(uuid.uuid4())
+    
+    data = {
+        'key': settings.PAYU_MERCHANT_KEY,
+        'command': 'si_transaction',
+        'var1': var1,
+    }
+    headers = {
+        'accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+
+
+
+    # Generate hash for secure transaction
+    #hash_string = '|'.join([str(data[key]) for key in sorted(data.keys())]) + '|' + settings.PAYU_MERCHANT_SALT
+        # Generate hash for secure transaction
+    hash_string = f"{data['key']}|{data['command']}|{var1}|{settings.PAYU_MERCHANT_SALT}"
+    data['hash'] = hashlib.sha512(hash_string.encode('utf-8')).hexdigest()
+
+    #data['hash'] = hashlib.sha512(hash_string.encode('utf-8')).hexdigest()
+
+    # Send request to PayU
+    response = requests.post(settings.PAYU_RECURRING_URL,headers=headers, data=data)
+    print('Response of Json format',response)
+    try:
+       return response.json()
+    except requests.exceptions.JSONDecodeError:
+        print("Non Json response received........",response.text)
+
 
 def calculate_next_billing_date(subscription):
     """Calculate the next billing date based on the subscription's billing cycle."""
@@ -266,6 +316,18 @@ def initiate_payment(request):
         amount=subscription.subscription_price,
         status='pending',
     )
+    today = datetime.date.today().strftime("%Y-%m-%d")
+    si_details = {
+        "billingAmount": str(payment.amount),
+        "billingCurrency": "INR",
+        "billingCycle": "DAILY",
+        "billingInterval": 1,
+        'billing_cycle':24,
+        "paymentStartDate": today,  # Start today
+        "paymentEndDate": (datetime.date.today() + datetime.timedelta(days=1)).strftime("%Y-%m-%d"),  # End tomorrow
+        "billing_cycle": 24  # Assuming this is the total number of cycles
+    }
+
 
     data = {
         'key': settings.PAYU_MERCHANT_KEY,
@@ -275,6 +337,8 @@ def initiate_payment(request):
         'firstname': request.user.name,
         'email': request.user.email,
         'phone': request.user.phone_number,
+        'si_details':json.dumps(si_details),
+        'si':1,
         'surl': 'http://127.0.0.1:8000/usersubscription/payment_success/',  # Success URL
         'furl': 'http://127.0.0.1:8000/payment_failure/',  # Failure URL,
         'store_card_token':'1'
@@ -299,6 +363,7 @@ def initiate_payment(request):
 @csrf_exempt
 def payment_success(request):
     response_data = request.POST
+    print("response_data",response_data)
     txnid = response_data.get('txnid')
     payment = Payment.objects.get(transcation_id=txnid)
     print("payment",payment)
@@ -309,6 +374,13 @@ def payment_success(request):
     if payment and payment.status!="completed":
         payment.status = 'completed'
         payment.save()
+        #authpayuid = response_data.get('mihpayid')
+
+        # Store the authpayuid in the user's subscription
+        #if authpayuid:
+            #payment.subscription.authpayuid = authpayuid  # If stored in the Subscription model
+            #payment.subscription.save()
+
 
         # Update the subscription status
         #import pdb
@@ -325,14 +397,19 @@ def payment_success(request):
         subscription.save()
         payment.user.subscription.add(subscription)
         payment.user.save()
-    #redirect_url=f"http://localhost:3000/subscriptions"
-    #redirect_url=f"https://d3cq3vpq332mz9.cloudfront.net"
-    redirect_url=f"https://d3rhp1eivkuqqo.cloudfront.net"
-    return HttpResponseRedirect(redirect_url)
+        #authpayuid = response_data.get('authpayuid')
+        #print("AUTHPAYUID",authpayuid)
+        #response=initate_monthly_recurring_payment(payment.user,payment.amount,subscription.id)
+        #print("response hitted url",response)
+        #redirect_url=f"http://localhost:3000/subscriptions"
+        #redirect_url=f"https://d3cq3vpq332mz9.cloudfront.net"
+        redirect_url=f"https://d3rhp1eivkuqqo.cloudfront.net"
+        return HttpResponseRedirect(redirect_url)
 
 @csrf_exempt
 @api_view(['POST'])
 def auto_payment_success(request):
+    print("request",request)
     # Extract the transaction details from the request
     txnid = request.data.get('txnid')
     subscription_name = request.data.get('productinfo')
@@ -380,3 +457,9 @@ def payment_failure(request):
         payment.save()
 
     return HttpResponse("Payment failed")
+
+@csrf_exempt
+def auto_payment_failure(request):
+    response_data=request.POST
+    print("response data",response_data)
+    return HttpResponse("payment failed")
