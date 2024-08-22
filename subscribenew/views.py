@@ -21,13 +21,13 @@ from datetime import date, timedelta
 import calendar
 import json
 import hashlib
-def initate_monthly_recurring_payment(user,amount,id):
+def initate_monthly_recurring_payment(user,amount,id,authpayuid):
     txn_id = str(uuid.uuid4())
     #subscription = Subscription.objects.get(id=id)
     #authpayuid = subscription.authpayuid  # Retrieve the authpayuid
 
     var1_dict= {
-        "authpayuid":"6611427463",
+        "authpayuid":authpayuid,
         "invoiceDisplayNumber": txn_id,
         "amount": str(amount),
         "txnid": txn_id,
@@ -334,10 +334,13 @@ def initiate_payment(request):
     productinfo = subscription.subscription_name
     firstname = request.user.name
     email = request.user.email
+    #pg="CC"
+
     salt = settings.PAYU_MERCHANT_SALT
     si_details_str = json.dumps(si_details)  # Ensure si_details is converted to a JSON string
     api_version = "7"  # The API version you're using
     hash_string = f"{key}|{txnid}|{amount}|{productinfo}|{firstname}|{email}|||||||||||{si_details_str}|{salt}|{api_version}"
+    #hash_string = f"{key}|{txnid}|{amount}|{productinfo}|{firstname}|{email}||||||||||||{api_version}"
     hash_value = hashlib.sha512(hash_string.encode('utf-8')).hexdigest()
 
 
@@ -350,11 +353,13 @@ def initiate_payment(request):
         'firstname': request.user.name,
         'email': request.user.email,
         'phone': request.user.phone_number,
+        #'pg':"CC",
         'si_details':json.dumps(si_details),
         'si':1,
         'surl': 'http://127.0.0.1:8000/usersubscription/payment_success/',  # Success URL
         'furl': 'http://127.0.0.1:8000/payment_failure/',  # Failure URL,
-        'hash':hash_value
+        #'store_card_token':'1',
+        #'hash':hash_value
     }
     payu = Payu(
     settings.PAYU_MERCHANT_KEY,
@@ -376,14 +381,14 @@ def initiate_payment(request):
 @csrf_exempt
 def payment_success(request):
     response_data = request.POST
-    print("response_data",response_data)
+    print("response_data of authpayuid",response_data)
     txnid = response_data.get('txnid')
     payment = Payment.objects.get(transcation_id=txnid)
     print("payment",payment)
     print("response",response_data)
     #print("save card token is",response_data["cardToken"])
-    card_token=response_data["cardToken"]
-    print("card_token",card_token)
+    #card_token=response_data["cardToken"]
+    #print("card_token",card_token)
     if payment and payment.status!="completed":
         payment.status = 'completed'
         payment.save()
@@ -391,6 +396,7 @@ def payment_success(request):
 
         # Store the authpayuid in the user's subscription
         #if authpayuid:
+            #print("MIPayuid",authpayuid)
             #payment.subscription.authpayuid = authpayuid  # If stored in the Subscription model
             #payment.subscription.save()
 
@@ -406,13 +412,13 @@ def payment_success(request):
         print("subscription is trial",subscription.is_trial)
         subscription.next_billing_date =calculate_next_billing_date(subscription)  # Implement your billing logic here
         print("subscription next",subscription.next_billing_date)
-        subscription.card_token=card_token
-        subscription.save()
+        #subscription.card_token=card_token
+        #subscription.save()
         payment.user.subscription.add(subscription)
         payment.user.save()
         #authpayuid = response_data.get('authpayuid')
         #print("AUTHPAYUID",authpayuid)
-        #response=initate_monthly_recurring_payment(payment.user,payment.amount,subscription.id)
+        #response=initate_monthly_recurring_payment(payment.user,payment.amount,subscription.id,authpayuid)
         #print("response hitted url",response)
         #redirect_url=f"http://localhost:3000/subscriptions"
         #redirect_url=f"https://d3cq3vpq332mz9.cloudfront.net"
