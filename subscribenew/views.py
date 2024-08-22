@@ -20,6 +20,7 @@ import requests
 from datetime import date, timedelta
 import calendar
 import json
+import hashlib
 def initate_monthly_recurring_payment(user,amount,id):
     txn_id = str(uuid.uuid4())
     #subscription = Subscription.objects.get(id=id)
@@ -322,11 +323,23 @@ def initiate_payment(request):
         "billingCurrency": "INR",
         "billingCycle": "DAILY",
         "billingInterval": 1,
-        'billing_cycle':24,
         "paymentStartDate": today,  # Start today
-        "paymentEndDate": (datetime.date.today() + datetime.timedelta(days=1)).strftime("%Y-%m-%d"),  # End tomorrow
-        "billing_cycle": 24  # Assuming this is the total number of cycles
+        "paymentEndDate": (datetime.date.today() + datetime.timedelta(days=30)).strftime("%Y-%m-%d"),  # End tomorrow
     }
+
+
+    key = settings.PAYU_MERCHANT_KEY
+    txnid = transaction_id
+    amount = str(payment.amount)
+    productinfo = subscription.subscription_name
+    firstname = request.user.name
+    email = request.user.email
+    salt = settings.PAYU_MERCHANT_SALT
+    si_details_str = json.dumps(si_details)  # Ensure si_details is converted to a JSON string
+    api_version = "7"  # The API version you're using
+    hash_string = f"{key}|{txnid}|{amount}|{productinfo}|{firstname}|{email}|||||||||||{si_details_str}|{salt}|{api_version}"
+    hash_value = hashlib.sha512(hash_string.encode('utf-8')).hexdigest()
+
 
 
     data = {
@@ -341,7 +354,7 @@ def initiate_payment(request):
         'si':1,
         'surl': 'http://127.0.0.1:8000/usersubscription/payment_success/',  # Success URL
         'furl': 'http://127.0.0.1:8000/payment_failure/',  # Failure URL,
-        'store_card_token':'1'
+        'hash':hash_value
     }
     payu = Payu(
     settings.PAYU_MERCHANT_KEY,
